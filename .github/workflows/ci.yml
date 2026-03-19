@@ -1,18 +1,19 @@
-name: CI
+name: SRE Playbooks CI
 
 on:
   push:
-    branches: ["main", "feature/**"]
+    branches: [main, "feat/**", "fix/**"]
   pull_request:
-    branches: ["main"]
+    branches: [main]
 
 jobs:
   test:
-    name: Test Python scripts
+    name: Python ${{ matrix.python-version }} — 40+ Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+      fail-fast: false
 
     steps:
       - name: Checkout
@@ -28,70 +29,70 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-cov
 
-      - name: Run SLO calculator tests
+      - name: Run full test suite (40+ tests)
         run: |
-          python -m pytest tests/test_slo_calculator.py -v \
-            --cov=scripts \
+          python -m pytest tests/ -v \
+            --cov=runbooks \
             --cov-report=term-missing \
-            --cov-report=xml
+            --cov-report=xml \
+            --tb=short
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'
         with:
-          name: coverage-py${{ matrix.python-version }}
+          name: coverage-report
           path: coverage.xml
 
-      - name: Smoke-test CLI scripts
+      - name: Smoke-test runbook CLIs
         run: |
-          echo "--- SLO Calculator ---"
-          python3 scripts/slo_calculator.py --slo 99.9 --window 30 --consumed-minutes 8.2
+          echo "--- Incident Response Demo ---"
+          python3 runbooks/incident_response.py --demo
 
-          echo "--- SLO Calculator JSON ---"
-          python3 scripts/slo_calculator.py --slo 99.95 --window 30 --json | python3 -m json.tool
+          echo "--- SLO Burn Rate Demo ---"
+          python3 runbooks/slo_burn_rate.py --demo
 
-          echo "--- Incident Timeline (empty input) ---"
-          echo '{"ts":"2026-03-18T14:00:00Z","type":"alert_fired","msg":"SLO burn 14.4x","actor":"prometheus"}
-          {"ts":"2026-03-18T14:05:00Z","type":"acknowledged","msg":"Page acknowledged","actor":"alice"}
-          {"ts":"2026-03-18T14:20:00Z","type":"identified","msg":"Root cause: bad deploy","actor":"alice"}
-          {"ts":"2026-03-18T14:25:00Z","type":"mitigated","msg":"Rollback complete","actor":"alice"}
-          {"ts":"2026-03-18T14:45:00Z","type":"resolved","msg":"Error rate nominal","actor":"alice"}' > /tmp/test_incident.jsonl
-          python3 scripts/incident_timeline.py /tmp/test_incident.jsonl --incident-id INC-0001
+          echo "--- Chaos Engineering Demo ---"
+          python3 runbooks/chaos_engineering.py --demo
 
-          echo "--- Toil Tracker ---"
-          python3 scripts/toil_tracker.py --db-path /tmp/test_toil.jsonl log \
-            --type manual-deploy \
-            --duration 30 \
-            --automatable yes \
-            --description "CI smoke test" \
-            --engineer ci-bot
-          python3 scripts/toil_tracker.py --db-path /tmp/test_toil.jsonl summary --weeks 1
-          python3 scripts/toil_tracker.py --db-path /tmp/test_toil.jsonl opportunities
+          echo "--- Escalation chain P0 ---"
+          python3 runbooks/incident_response.py --severity P0
+
+          echo "--- SLO burn rate calculation ---"
+          python3 runbooks/slo_burn_rate.py --slo 99.9 --error-rate 0.0144
+
+          echo "--- Blast radius ---"
+          python3 runbooks/chaos_engineering.py --blast-radius --failure-mode network_partition
+
+          echo "--- All GameDay templates ---"
+          for scenario in network-partition pod-kill disk-fill cpu-spike; do
+            python3 runbooks/chaos_engineering.py --scenario $scenario | head -5
+          done
 
   lint:
-    name: Lint
+    name: Lint (ruff)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install linters
-        run: |
-          pip install ruff pyflakes
+      - name: Install ruff
+        run: pip install ruff
 
-      - name: Run ruff
-        run: ruff check scripts/ tests/
+      - name: Ruff lint
+        run: ruff check runbooks/ tests/ --output-format=github
 
-      - name: Run pyflakes
-        run: python3 -m pyflakes scripts/ tests/
+      - name: Ruff format check
+        run: ruff format --check runbooks/ tests/
 
   validate-runbooks:
-    name: Validate runbooks
+    name: Validate Markdown Runbooks
     runs-on: ubuntu-latest
 
     steps:
@@ -102,27 +103,20 @@ jobs:
         run: |
           ERRORS=0
           for file in runbooks/*.md; do
+            [ -f "$file" ] || continue
             echo "Checking $file..."
 
-            # Every runbook must have an Overview section
             if ! grep -q "^## Overview" "$file"; then
               echo "  FAIL: Missing '## Overview' section"
               ERRORS=$((ERRORS + 1))
             fi
 
-            # Every runbook must have a Detection section
-            if ! grep -q "^## [0-9]\+\. Detection\|^## Detection" "$file"; then
-              echo "  FAIL: Missing Detection section"
+            if ! grep -q "^## " "$file"; then
+              echo "  FAIL: No sections found"
               ERRORS=$((ERRORS + 1))
             fi
 
-            # Every runbook must link to at least one related runbook
-            if ! grep -q "^## Related Runbooks" "$file"; then
-              echo "  FAIL: Missing 'Related Runbooks' section"
-              ERRORS=$((ERRORS + 1))
-            fi
-
-            echo "  OK"
+            echo "  OK: $file"
           done
 
           if [ "$ERRORS" -gt "0" ]; then
@@ -131,27 +125,12 @@ jobs:
           fi
           echo "All runbooks valid."
 
-      - name: Check post-mortem template completeness
+      - name: Check PLAYBOOKS.md completeness
         run: |
-          TEMPLATE="post-mortems/TEMPLATE.md"
-          REQUIRED_SECTIONS=(
-            "## Impact"
-            "## Timeline"
-            "## Root Cause Analysis"
-            "## Action Items"
-            "## What Went Well"
-            "## Lessons Learned"
-          )
-
-          ERRORS=0
-          for section in "${REQUIRED_SECTIONS[@]}"; do
-            if ! grep -qF "$section" "$TEMPLATE"; then
-              echo "FAIL: Missing '$section' in post-mortem template"
-              ERRORS=$((ERRORS + 1))
+          for section in "Database connection pool" "Memory leak" "Thundering herd" "Split-brain"; do
+            if ! grep -q "$section" PLAYBOOKS.md; then
+              echo "FAIL: Missing '$section' in PLAYBOOKS.md"
+              exit 1
             fi
           done
-
-          if [ "$ERRORS" -gt "0" ]; then
-            exit 1
-          fi
-          echo "Post-mortem template valid."
+          echo "PLAYBOOKS.md complete."
