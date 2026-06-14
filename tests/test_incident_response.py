@@ -18,7 +18,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "runbooks"))
 
 from incident_response import (
-    DEFAULT_ESCALATION_CHAIN,
     SEVERITY_CONFIG,
     IncidentMetrics,
     Severity,
@@ -33,18 +32,43 @@ from incident_response import (
 # ---------------------------------------------------------------------------
 
 SAMPLE_EVENTS = [
-    {"ts": "2026-03-18T14:00:00Z", "type": "incident_start", "severity": "P0",
-     "msg": "Payment failures spiking", "actor": "prometheus"},
-    {"ts": "2026-03-18T14:02:00Z", "type": "alert_fired",
-     "msg": "PagerDuty P0 alert", "actor": "pagerduty"},
-    {"ts": "2026-03-18T14:06:00Z", "type": "acknowledged",
-     "msg": "On-call acked", "actor": "alice"},
-    {"ts": "2026-03-18T14:14:00Z", "type": "identified",
-     "msg": "Root cause: bad deploy", "actor": "alice"},
-    {"ts": "2026-03-18T14:19:00Z", "type": "mitigated",
-     "msg": "Rollback complete", "actor": "alice"},
-    {"ts": "2026-03-18T14:47:00Z", "type": "resolved",
-     "msg": "Incident closed", "actor": "alice"},
+    {
+        "ts": "2026-03-18T14:00:00Z",
+        "type": "incident_start",
+        "severity": "P0",
+        "msg": "Payment failures spiking",
+        "actor": "prometheus",
+    },
+    {
+        "ts": "2026-03-18T14:02:00Z",
+        "type": "alert_fired",
+        "msg": "PagerDuty P0 alert",
+        "actor": "pagerduty",
+    },
+    {
+        "ts": "2026-03-18T14:06:00Z",
+        "type": "acknowledged",
+        "msg": "On-call acked",
+        "actor": "alice",
+    },
+    {
+        "ts": "2026-03-18T14:14:00Z",
+        "type": "identified",
+        "msg": "Root cause: bad deploy",
+        "actor": "alice",
+    },
+    {
+        "ts": "2026-03-18T14:19:00Z",
+        "type": "mitigated",
+        "msg": "Rollback complete",
+        "actor": "alice",
+    },
+    {
+        "ts": "2026-03-18T14:47:00Z",
+        "type": "resolved",
+        "msg": "Incident closed",
+        "actor": "alice",
+    },
 ]
 
 
@@ -57,8 +81,8 @@ def sample_metrics() -> IncidentMetrics:
 # Tests: MTTD/MTTA/MTTI/MTTM/MTTR calculations
 # ---------------------------------------------------------------------------
 
-class TestMetricsCalculations:
 
+class TestMetricsCalculations:
     def test_mttd_is_2_minutes(self, sample_metrics: IncidentMetrics) -> None:
         """Alert fired 2 minutes after incident start."""
         assert sample_metrics.mttd_minutes == pytest.approx(2.0)
@@ -82,10 +106,19 @@ class TestMetricsCalculations:
     def test_none_when_alert_missing(self) -> None:
         """MTTD is None when no alert_fired event exists."""
         events = [
-            {"ts": "2026-03-18T14:00:00Z", "type": "incident_start", "severity": "P1",
-             "msg": "Degradation", "actor": "human"},
-            {"ts": "2026-03-18T14:30:00Z", "type": "resolved",
-             "msg": "Fixed", "actor": "human"},
+            {
+                "ts": "2026-03-18T14:00:00Z",
+                "type": "incident_start",
+                "severity": "P1",
+                "msg": "Degradation",
+                "actor": "human",
+            },
+            {
+                "ts": "2026-03-18T14:30:00Z",
+                "type": "resolved",
+                "msg": "Fixed",
+                "actor": "human",
+            },
         ]
         metrics = parse_events(events)
         assert metrics.mttd_minutes is None
@@ -94,8 +127,13 @@ class TestMetricsCalculations:
     def test_mttr_is_none_when_unresolved(self) -> None:
         """MTTR is None when incident has no resolved event."""
         events = [
-            {"ts": "2026-03-18T14:00:00Z", "type": "incident_start", "severity": "P2",
-             "msg": "Degradation", "actor": "prometheus"},
+            {
+                "ts": "2026-03-18T14:00:00Z",
+                "type": "incident_start",
+                "severity": "P2",
+                "msg": "Degradation",
+                "actor": "prometheus",
+            },
         ]
         metrics = parse_events(events)
         assert metrics.mttr_minutes is None
@@ -105,8 +143,8 @@ class TestMetricsCalculations:
 # Tests: severity classification
 # ---------------------------------------------------------------------------
 
-class TestSeverityClassification:
 
+class TestSeverityClassification:
     def test_high_error_rate_is_p0(self) -> None:
         sev = classify_severity(
             error_rate_percent=6.0,
@@ -157,8 +195,8 @@ class TestSeverityClassification:
 # Tests: severity config
 # ---------------------------------------------------------------------------
 
-class TestSeverityConfig:
 
+class TestSeverityConfig:
     def test_p0_response_target_is_5_minutes(self) -> None:
         assert SEVERITY_CONFIG[Severity.P0]["response_time_minutes"] == 5
 
@@ -170,15 +208,17 @@ class TestSeverityConfig:
 
     def test_p0_burn_rate_multiplier(self) -> None:
         """P0 uses the canonical 14.4× fast burn threshold."""
-        assert SEVERITY_CONFIG[Severity.P0]["error_budget_multiplier"] == pytest.approx(14.4)
+        assert SEVERITY_CONFIG[Severity.P0]["error_budget_multiplier"] == pytest.approx(
+            14.4
+        )
 
 
 # ---------------------------------------------------------------------------
 # Tests: escalation chain
 # ---------------------------------------------------------------------------
 
-class TestEscalationChain:
 
+class TestEscalationChain:
     def test_p0_pages_all_5_tiers(self) -> None:
         now = datetime(2026, 3, 18, 14, 0, 0, tzinfo=timezone.utc)
         chain = build_escalation_timeline(now, Severity.P0)
@@ -207,20 +247,26 @@ class TestEscalationChain:
 # Tests: postmortem generation
 # ---------------------------------------------------------------------------
 
-class TestPostmortem:
 
-    def test_postmortem_contains_incident_id(self, sample_metrics: IncidentMetrics) -> None:
+class TestPostmortem:
+    def test_postmortem_contains_incident_id(
+        self, sample_metrics: IncidentMetrics
+    ) -> None:
         pm = generate_postmortem(sample_metrics, "Test Incident")
         assert "INC-TEST-001" in pm
 
-    def test_postmortem_contains_all_metric_rows(self, sample_metrics: IncidentMetrics) -> None:
+    def test_postmortem_contains_all_metric_rows(
+        self, sample_metrics: IncidentMetrics
+    ) -> None:
         pm = generate_postmortem(sample_metrics, "Test Incident")
         assert "MTTD" in pm
         assert "MTTA" in pm
         assert "MTTM" in pm
         assert "MTTR" in pm
 
-    def test_postmortem_is_valid_markdown(self, sample_metrics: IncidentMetrics) -> None:
+    def test_postmortem_is_valid_markdown(
+        self, sample_metrics: IncidentMetrics
+    ) -> None:
         pm = generate_postmortem(sample_metrics, "Test Incident")
         # Should have h1 title and h2 sections
         assert pm.startswith("# Postmortem")
@@ -228,7 +274,9 @@ class TestPostmortem:
         assert "## Timeline" in pm
         assert "## Action Items" in pm
 
-    def test_postmortem_marks_met_response_target(self, sample_metrics: IncidentMetrics) -> None:
+    def test_postmortem_marks_met_response_target(
+        self, sample_metrics: IncidentMetrics
+    ) -> None:
         """MTTA was 4 min; P0 target is 5 min — should be ✅."""
         pm = generate_postmortem(sample_metrics, "Test Incident")
         # Response met: 4 min ≤ 5 min target → ✅

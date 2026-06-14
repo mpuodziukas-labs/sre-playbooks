@@ -29,6 +29,7 @@ from typing import Final
 # Severity model
 # ---------------------------------------------------------------------------
 
+
 class Severity(str, Enum):
     P0 = "P0"  # Total outage, revenue impact, all hands
     P1 = "P1"  # Major degradation, SLO breach imminent
@@ -41,8 +42,8 @@ SEVERITY_CONFIG: Final[dict[Severity, dict[str, object]]] = {
     Severity.P0: {
         "response_time_minutes": 5,
         "resolution_target_minutes": 60,
-        "slo_impact": "critical",          # full SLO breach
-        "error_budget_multiplier": 14.4,   # 14.4× burn rate alert threshold
+        "slo_impact": "critical",  # full SLO breach
+        "error_budget_multiplier": 14.4,  # 14.4× burn rate alert threshold
         "requires_war_room": True,
         "requires_exec_notification": True,
         "escalation_delay_minutes": 5,
@@ -89,6 +90,7 @@ SEVERITY_CONFIG: Final[dict[Severity, dict[str, object]]] = {
 # ---------------------------------------------------------------------------
 # On-call escalation chain
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class OnCallTier:
@@ -145,23 +147,32 @@ def build_escalation_timeline(
     escalation_delay: int = int(config["escalation_delay_minutes"])  # type: ignore[arg-type]
 
     # For P3/P4 only page tier 1 by default
-    max_tiers = 5 if severity in (Severity.P0, Severity.P1) else (3 if severity == Severity.P2 else 1)
+    max_tiers = (
+        5
+        if severity in (Severity.P0, Severity.P1)
+        else (3 if severity == Severity.P2 else 1)
+    )
 
     events: list[dict[str, str]] = []
     current_time = incident_start
 
     for tier in chain[:max_tiers]:
-        notify_time = current_time + timedelta(minutes=tier.escalation_after_minutes if tier.tier > 1 else 0)
-        events.append({
-            "timestamp": notify_time.isoformat(),
-            "action": "PAGE",
-            "tier": str(tier.tier),
-            "role": tier.role,
-            "contacts": ", ".join(tier.contacts),
-            "expected_response_by": (
-                notify_time + timedelta(minutes=int(config["response_time_minutes"]))  # type: ignore[arg-type]
-            ).isoformat(),
-        })
+        notify_time = current_time + timedelta(
+            minutes=tier.escalation_after_minutes if tier.tier > 1 else 0
+        )
+        events.append(
+            {
+                "timestamp": notify_time.isoformat(),
+                "action": "PAGE",
+                "tier": str(tier.tier),
+                "role": tier.role,
+                "contacts": ", ".join(tier.contacts),
+                "expected_response_by": (
+                    notify_time
+                    + timedelta(minutes=int(config["response_time_minutes"]))  # type: ignore[arg-type]
+                ).isoformat(),
+            }
+        )
         current_time = notify_time + timedelta(minutes=escalation_delay)
 
     return events
@@ -170,6 +181,7 @@ def build_escalation_timeline(
 # ---------------------------------------------------------------------------
 # Incident metrics
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class IncidentEvent:
@@ -255,16 +267,20 @@ class IncidentMetrics:
         return self.mttr_minutes <= target
 
 
-def parse_events(raw_events: list[dict[str, str]], incident_id: str = "INC-UNKNOWN") -> IncidentMetrics:
+def parse_events(
+    raw_events: list[dict[str, str]], incident_id: str = "INC-UNKNOWN"
+) -> IncidentMetrics:
     """Parse a list of raw event dicts into an IncidentMetrics object."""
     parsed: list[IncidentEvent] = []
     for ev in raw_events:
-        parsed.append(IncidentEvent(
-            timestamp=datetime.fromisoformat(ev["ts"].replace("Z", "+00:00")),
-            event_type=ev["type"],
-            message=ev.get("msg", ""),
-            actor=ev.get("actor", "unknown"),
-        ))
+        parsed.append(
+            IncidentEvent(
+                timestamp=datetime.fromisoformat(ev["ts"].replace("Z", "+00:00")),
+                event_type=ev["type"],
+                message=ev.get("msg", ""),
+                actor=ev.get("actor", "unknown"),
+            )
+        )
 
     parsed.sort(key=lambda e: e.timestamp)
 
@@ -299,7 +315,10 @@ def parse_events(raw_events: list[dict[str, str]], incident_id: str = "INC-UNKNO
 # Postmortem template
 # ---------------------------------------------------------------------------
 
-def generate_postmortem(metrics: IncidentMetrics, title: str = "Incident Postmortem") -> str:
+
+def generate_postmortem(
+    metrics: IncidentMetrics, title: str = "Incident Postmortem"
+) -> str:
     """Generate a Stripe/Google-style postmortem in Markdown."""
     config = SEVERITY_CONFIG[metrics.severity]
     sev_impact = config["slo_impact"]
@@ -328,7 +347,9 @@ def generate_postmortem(metrics: IncidentMetrics, title: str = "Incident Postmor
     met_response = metrics.met_response_target
     met_resolution = metrics.met_resolution_target
     response_emoji = "✅" if met_response else ("❌" if met_response is False else "—")
-    resolution_emoji = "✅" if met_resolution else ("❌" if met_resolution is False else "—")
+    resolution_emoji = (
+        "✅" if met_resolution else ("❌" if met_resolution is False else "—")
+    )
 
     return f"""# Postmortem: {title}
 
@@ -449,6 +470,7 @@ _Generated by `incident_response.py` — exo SRE Playbooks_
 # Severity classifier
 # ---------------------------------------------------------------------------
 
+
 def classify_severity(
     error_rate_percent: float,
     latency_p99_ms: float,
@@ -497,18 +519,43 @@ def classify_severity(
 # ---------------------------------------------------------------------------
 
 DEMO_EVENTS: Final[list[dict[str, str]]] = [
-    {"ts": "2026-03-18T14:00:00Z", "type": "incident_start", "severity": "P0",
-     "msg": "SLO burn rate 14.4x — payment failures spiking", "actor": "prometheus"},
-    {"ts": "2026-03-18T14:02:00Z", "type": "alert_fired",
-     "msg": "PagerDuty: SLO burn rate CRITICAL", "actor": "pagerduty"},
-    {"ts": "2026-03-18T14:06:00Z", "type": "acknowledged",
-     "msg": "On-call acknowledged — starting investigation", "actor": "alice@stripe.com"},
-    {"ts": "2026-03-18T14:14:00Z", "type": "identified",
-     "msg": "Root cause: DB connection pool exhausted after deploy v4.2.1", "actor": "alice@stripe.com"},
-    {"ts": "2026-03-18T14:19:00Z", "type": "mitigated",
-     "msg": "Rolled back to v4.2.0, connection pool recovering", "actor": "alice@stripe.com"},
-    {"ts": "2026-03-18T14:47:00Z", "type": "resolved",
-     "msg": "Error rate nominal, SLO burn rate <1x", "actor": "alice@stripe.com"},
+    {
+        "ts": "2026-03-18T14:00:00Z",
+        "type": "incident_start",
+        "severity": "P0",
+        "msg": "SLO burn rate 14.4x — payment failures spiking",
+        "actor": "prometheus",
+    },
+    {
+        "ts": "2026-03-18T14:02:00Z",
+        "type": "alert_fired",
+        "msg": "PagerDuty: SLO burn rate CRITICAL",
+        "actor": "pagerduty",
+    },
+    {
+        "ts": "2026-03-18T14:06:00Z",
+        "type": "acknowledged",
+        "msg": "On-call acknowledged — starting investigation",
+        "actor": "alice@stripe.com",
+    },
+    {
+        "ts": "2026-03-18T14:14:00Z",
+        "type": "identified",
+        "msg": "Root cause: DB connection pool exhausted after deploy v4.2.1",
+        "actor": "alice@stripe.com",
+    },
+    {
+        "ts": "2026-03-18T14:19:00Z",
+        "type": "mitigated",
+        "msg": "Rolled back to v4.2.0, connection pool recovering",
+        "actor": "alice@stripe.com",
+    },
+    {
+        "ts": "2026-03-18T14:47:00Z",
+        "type": "resolved",
+        "msg": "Error rate nominal, SLO burn rate <1x",
+        "actor": "alice@stripe.com",
+    },
 ]
 
 
@@ -532,7 +579,9 @@ def run_demo() -> None:
 
     print("ESCALATION CHAIN:")
     for ev in build_escalation_timeline(metrics.started_at, metrics.severity):
-        print(f"  T{ev['tier']} [{ev['timestamp'][:16]}] PAGE {ev['role']} → {ev['contacts']}")
+        print(
+            f"  T{ev['tier']} [{ev['timestamp'][:16]}] PAGE {ev['role']} → {ev['contacts']}"
+        )
     print()
 
     print("POSTMORTEM PREVIEW (first 30 lines):")
@@ -545,12 +594,19 @@ def run_demo() -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Incident Response Lifecycle Simulator")
+    parser = argparse.ArgumentParser(
+        description="Incident Response Lifecycle Simulator"
+    )
     parser.add_argument("--demo", action="store_true", help="Run demo incident")
     parser.add_argument("--severity", choices=[s.value for s in Severity], default="P1")
-    parser.add_argument("--duration", type=float, default=30.0, help="Incident duration in minutes")
-    parser.add_argument("--postmortem", help="Path to JSON events file for postmortem generation")
+    parser.add_argument(
+        "--duration", type=float, default=30.0, help="Incident duration in minutes"
+    )
+    parser.add_argument(
+        "--postmortem", help="Path to JSON events file for postmortem generation"
+    )
     args = parser.parse_args()
 
     if args.demo:

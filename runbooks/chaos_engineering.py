@@ -35,6 +35,7 @@ from typing import Final
 # Failure modes
 # ---------------------------------------------------------------------------
 
+
 class FailureMode(str, Enum):
     NETWORK_PARTITION = "network_partition"
     POD_KILL = "pod_kill"
@@ -60,14 +61,15 @@ class ExperimentStatus(str, Enum):
 # Blast radius model
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ServiceDependency:
     name: str
-    traffic_weight: float        # 0.0–1.0 fraction of total traffic this service handles
-    criticality: str             # critical | high | medium | low
+    traffic_weight: float  # 0.0–1.0 fraction of total traffic this service handles
+    criticality: str  # critical | high | medium | low
     has_circuit_breaker: bool
     has_fallback: bool
-    slo_target: float            # e.g. 0.999
+    slo_target: float  # e.g. 0.999
 
 
 CRITICALITY_MULTIPLIER: Final[dict[str, float]] = {
@@ -82,9 +84,9 @@ CRITICALITY_MULTIPLIER: Final[dict[str, float]] = {
 class BlastRadiusResult:
     services: list[ServiceDependency]
     failure_mode: FailureMode
-    affected_traffic_fraction: float   # 0.0–1.0
-    blast_radius_score: float          # 0.0–10.0
-    risk_level: str                    # low | medium | high | critical
+    affected_traffic_fraction: float  # 0.0–1.0
+    blast_radius_score: float  # 0.0–10.0
+    risk_level: str  # low | medium | high | critical
     mitigations_active: int
     mitigations_total: int
     recommendation: str
@@ -152,10 +154,14 @@ def calculate_blast_radius(
         recommendation = "Proceed only with full war room staffed and rollback tested."
     elif blast_score >= 4.0:
         risk_level = "medium"
-        recommendation = "Proceed with on-call standing by and 5-minute abort criteria defined."
+        recommendation = (
+            "Proceed with on-call standing by and 5-minute abort criteria defined."
+        )
     elif blast_score >= 2.0:
         risk_level = "low"
-        recommendation = "Safe to proceed in staging. Run in production during low-traffic window."
+        recommendation = (
+            "Safe to proceed in staging. Run in production during low-traffic window."
+        )
     else:
         risk_level = "low"
         recommendation = "Safe to proceed. Mitigations in place."
@@ -176,13 +182,16 @@ def calculate_blast_radius(
 # Hypothesis + evidence tracking
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Hypothesis:
     statement: str
-    steady_state_metric: str     # e.g. "p99 latency < 200ms"
+    steady_state_metric: str  # e.g. "p99 latency < 200ms"
     steady_state_threshold: float
-    metric_unit: str             # ms, %, count, etc.
-    higher_is_better: bool = False  # True for metrics like availability%; False for latency/error rate
+    metric_unit: str  # ms, %, count, etc.
+    higher_is_better: bool = (
+        False  # True for metrics like availability%; False for latency/error rate
+    )
 
 
 @dataclass
@@ -251,6 +260,7 @@ class ChaosExperiment:
 # ---------------------------------------------------------------------------
 # GameDay scenario templates
 # ---------------------------------------------------------------------------
+
 
 def gameday_network_partition(services: list[ServiceDependency]) -> ChaosExperiment:
     """
@@ -341,7 +351,7 @@ def gameday_pod_kill(services: list[ServiceDependency]) -> ChaosExperiment:
             "Setup (using chaos-mesh or manual):\n"
             "  # Manual pod kill\n"
             "  POD=$(kubectl get pods -l app=$SERVICE -o name | shuf -n1)\n"
-            "  echo \"Killing $POD\" && kubectl delete $POD --grace-period=0 --force\n\n"
+            '  echo "Killing $POD" && kubectl delete $POD --grace-period=0 --force\n\n'
             "  # Using chaos-mesh\n"
             "  kubectl apply -f chaos-mesh/pod-kill-experiment.yaml\n\n"
             "Observe:\n"
@@ -463,6 +473,7 @@ GAMEDAY_TEMPLATES: Final[dict[str, object]] = {
 # Recovery verification
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class RecoveryVerificationResult:
     experiment_id: str
@@ -479,9 +490,12 @@ def verify_recovery(
     recovery_time_seconds: float | None = None,
 ) -> RecoveryVerificationResult:
     """Evaluate whether the system recovered as hypothesized."""
-    all_passed = all(e.passed for e in experiment.evidence) if experiment.evidence else True
+    all_passed = (
+        all(e.passed for e in experiment.evidence) if experiment.evidence else True
+    )
     any_slo_breach = any(
-        not e.passed for e in experiment.evidence
+        not e.passed
+        for e in experiment.evidence
         if "slo" in e.metric_name.lower() or "availability" in e.metric_name.lower()
     )
 
@@ -555,7 +569,9 @@ def run_demo() -> None:
 
     # Blast radius
     br = calculate_blast_radius(DEMO_SERVICES, FailureMode.NETWORK_PARTITION)
-    print(f"Blast Radius Score : {br.blast_radius_score}/10.0 ({br.risk_level.upper()})")
+    print(
+        f"Blast Radius Score : {br.blast_radius_score}/10.0 ({br.risk_level.upper()})"
+    )
     print(f"Affected Traffic   : {br.affected_traffic_percent:.0f}%")
     print(f"Mitigations Active : {br.mitigations_active}/{br.mitigations_total}")
     print(f"Recommendation     : {br.recommendation}")
@@ -570,7 +586,9 @@ def run_demo() -> None:
     print()
 
     # Simulate evidence collection
-    exp.add_evidence("api_p99_latency_ms", 380.0, notes="Circuit breaker activated at T+4s")
+    exp.add_evidence(
+        "api_p99_latency_ms", 380.0, notes="Circuit breaker activated at T+4s"
+    )
     exp.add_evidence("api_p99_latency_ms", 420.0, notes="Serving cached reads")
     exp.add_evidence("api_p99_latency_ms", 210.0, notes="After partition healed")
 
@@ -591,14 +609,21 @@ def run_demo() -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Chaos Engineering Framework")
     parser.add_argument("--demo", action="store_true")
-    parser.add_argument("--scenario", choices=list(GAMEDAY_TEMPLATES.keys()),
-                        help="Print a GameDay scenario")
+    parser.add_argument(
+        "--scenario",
+        choices=list(GAMEDAY_TEMPLATES.keys()),
+        help="Print a GameDay scenario",
+    )
     parser.add_argument("--blast-radius", action="store_true")
-    parser.add_argument("--failure-mode", default="network_partition",
-                        choices=[m.value for m in FailureMode])
+    parser.add_argument(
+        "--failure-mode",
+        default="network_partition",
+        choices=[m.value for m in FailureMode],
+    )
     args = parser.parse_args()
 
     if args.demo:
@@ -610,7 +635,7 @@ def main() -> int:
         exp = template_fn(DEMO_SERVICES)  # type: ignore[operator]
         print(f"=== {exp.title} ===")
         print(f"\nHypothesis:\n  {exp.hypothesis.statement}")
-        print(f"\nAbort Criteria:")
+        print("\nAbort Criteria:")
         for c in exp.abort_criteria:
             print(f"  - {c}")
         print(f"\nRollback:\n{exp.rollback_procedure}")

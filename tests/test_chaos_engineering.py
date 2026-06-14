@@ -17,8 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "runbooks"))
 
 from chaos_engineering import (
     GAMEDAY_TEMPLATES,
-    BlastRadiusResult,
-    ChaosExperiment,
     FailureMode,
     ServiceDependency,
     calculate_blast_radius,
@@ -33,6 +31,7 @@ from chaos_engineering import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def critical_service() -> ServiceDependency:
@@ -70,8 +69,8 @@ def demo_services(
 # Tests: blast radius calculation
 # ---------------------------------------------------------------------------
 
-class TestBlastRadius:
 
+class TestBlastRadius:
     def test_critical_no_mitigations_is_high_risk(
         self, critical_service: ServiceDependency
     ) -> None:
@@ -97,19 +96,29 @@ class TestBlastRadius:
         self, critical_service: ServiceDependency
     ) -> None:
         """Network partitions have higher blast radius than pod kills (1.4× vs 0.8× multiplier)."""
-        br_np = calculate_blast_radius([critical_service], FailureMode.NETWORK_PARTITION)
+        br_np = calculate_blast_radius(
+            [critical_service], FailureMode.NETWORK_PARTITION
+        )
         br_pk = calculate_blast_radius([critical_service], FailureMode.POD_KILL)
         assert br_np.blast_radius_score > br_pk.blast_radius_score
 
     def test_mitigations_reduce_score(self) -> None:
         """Adding circuit breaker + fallback should reduce blast radius score."""
         no_mitigations = ServiceDependency(
-            name="api", traffic_weight=0.3, criticality="high",
-            has_circuit_breaker=False, has_fallback=False, slo_target=0.999
+            name="api",
+            traffic_weight=0.3,
+            criticality="high",
+            has_circuit_breaker=False,
+            has_fallback=False,
+            slo_target=0.999,
         )
         full_mitigations = ServiceDependency(
-            name="api", traffic_weight=0.3, criticality="high",
-            has_circuit_breaker=True, has_fallback=True, slo_target=0.999
+            name="api",
+            traffic_weight=0.3,
+            criticality="high",
+            has_circuit_breaker=True,
+            has_fallback=True,
+            slo_target=0.999,
         )
         br_none = calculate_blast_radius([no_mitigations], FailureMode.CPU_SPIKE)
         br_full = calculate_blast_radius([full_mitigations], FailureMode.CPU_SPIKE)
@@ -120,11 +129,14 @@ class TestBlastRadius:
 # Tests: GameDay templates
 # ---------------------------------------------------------------------------
 
-class TestGameDayTemplates:
 
+class TestGameDayTemplates:
     def test_all_4_templates_registered(self) -> None:
         assert set(GAMEDAY_TEMPLATES.keys()) == {
-            "network-partition", "pod-kill", "disk-fill", "cpu-spike"
+            "network-partition",
+            "pod-kill",
+            "disk-fill",
+            "cpu-spike",
         }
 
     def test_network_partition_has_rollback(
@@ -157,8 +169,8 @@ class TestGameDayTemplates:
 # Tests: hypothesis and recovery verification
 # ---------------------------------------------------------------------------
 
-class TestHypothesisTracking:
 
+class TestHypothesisTracking:
     def test_hypothesis_confirmed_when_all_pass(
         self, demo_services: list[ServiceDependency]
     ) -> None:
@@ -179,7 +191,9 @@ class TestHypothesisTracking:
         self, demo_services: list[ServiceDependency]
     ) -> None:
         exp = gameday_cpu_spike(demo_services)
-        exp.add_evidence("p99_latency_multiple_of_baseline", 12.0)  # WAY over 2× threshold
+        exp.add_evidence(
+            "p99_latency_multiple_of_baseline", 12.0
+        )  # WAY over 2× threshold
         assert exp.should_abort is True
 
     def test_verify_recovery_verdict_confirmed(

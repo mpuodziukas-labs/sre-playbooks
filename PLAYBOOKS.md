@@ -3,6 +3,15 @@
 Four battle-proven runbooks for the failure modes that actually page you at 3 AM.
 Each section follows the same structure: **Diagnose → Fix → Prevent**.
 
+## Playbook Index
+
+| # | Failure mode | Section |
+|---|--------------|---------|
+| 1 | Database connection pool exhaustion | [Database Connection Pool Exhaustion](#1-database-connection-pool-exhaustion) |
+| 2 | Memory leak in a Go service | [Memory Leak in Go Service](#2-memory-leak-in-go-service) |
+| 3 | Thundering herd on cache miss | [Thundering Herd on Cache Miss](#3-thundering-herd-on-cache-miss) |
+| 4 | Split-brain in distributed consensus | [Split-Brain in Distributed Consensus](#4-split-brain-in-distributed-consensus) |
+
 ---
 
 ## 1. Database Connection Pool Exhaustion

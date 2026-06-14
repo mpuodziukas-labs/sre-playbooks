@@ -17,9 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "runbooks"))
 
 from slo_burn_rate import (
-    MULTIWINDOW_ALERT_TIERS,
     BurnRateResult,
-    MultiWindowAlert,
     SLOConfig,
     _label_to_minutes,
     compute_fast_slow_thresholds,
@@ -32,8 +30,8 @@ from slo_burn_rate import (
 # Tests: SLOConfig
 # ---------------------------------------------------------------------------
 
-class TestSLOConfig:
 
+class TestSLOConfig:
     def test_from_percent_999(self) -> None:
         slo = SLOConfig.from_percent(99.9)
         assert slo.target == pytest.approx(0.999)
@@ -65,8 +63,8 @@ class TestSLOConfig:
 # Tests: BurnRateResult
 # ---------------------------------------------------------------------------
 
-class TestBurnRateResult:
 
+class TestBurnRateResult:
     def test_burn_rate_at_slo_pace(self) -> None:
         """Error rate == error budget → burn rate == 1.0."""
         slo = SLOConfig.from_percent(99.9)
@@ -101,8 +99,8 @@ class TestBurnRateResult:
 # Tests: label_to_minutes
 # ---------------------------------------------------------------------------
 
-class TestLabelToMinutes:
 
+class TestLabelToMinutes:
     def test_1h_is_60_minutes(self) -> None:
         assert _label_to_minutes("1h") == 60
 
@@ -124,8 +122,8 @@ class TestLabelToMinutes:
 # Tests: multi-window alert evaluation
 # ---------------------------------------------------------------------------
 
-class TestMultiWindowAlerts:
 
+class TestMultiWindowAlerts:
     def _make_burn_rates(
         self,
         rate_1h: float = 0.0,
@@ -137,9 +135,12 @@ class TestMultiWindowAlerts:
         rate_72h: float = 0.0,
     ) -> dict[str, float]:
         return {
-            "1h": rate_1h, "5m": rate_5m,
-            "6h": rate_6h, "30m": rate_30m,
-            "24h": rate_24h, "2h": rate_2h,
+            "1h": rate_1h,
+            "5m": rate_5m,
+            "6h": rate_6h,
+            "30m": rate_30m,
+            "24h": rate_24h,
+            "2h": rate_2h,
             "72h": rate_72h,
         }
 
@@ -179,8 +180,8 @@ class TestMultiWindowAlerts:
 # Tests: fast/slow burn thresholds
 # ---------------------------------------------------------------------------
 
-class TestFastSlowThresholds:
 
+class TestFastSlowThresholds:
     def test_p0_canonical_threshold_is_14_4(self) -> None:
         slo = SLOConfig.from_percent(99.9)
         thresholds = compute_fast_slow_thresholds(slo)
@@ -202,8 +203,8 @@ class TestFastSlowThresholds:
 # Tests: Prometheus rule generation
 # ---------------------------------------------------------------------------
 
-class TestPrometheusRules:
 
+class TestPrometheusRules:
     def test_contains_all_four_alert_names(self) -> None:
         slo = SLOConfig.from_percent(99.9)
         rules = generate_prometheus_rules(slo)
