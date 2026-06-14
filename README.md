@@ -376,4 +376,12 @@ GitHub Actions runs on every push:
 
 ---
 
+## Limitations
+
+- Runbooks and modules are reference patterns — adapt the commands and thresholds to your own stack before relying on them in an incident.
+- The Python modules model SRE math and lifecycle logic; they are not wired to a live alerting or paging backend out of the box.
+- Sample outputs and timings are illustrative, not measurements from a specific production environment.
+
+---
+
 *Built for Stripe/Coinbase/Zoom-scale reliability engineering.*
